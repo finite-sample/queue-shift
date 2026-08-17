@@ -38,7 +38,7 @@ Issues = "https://github.com/finite-sample/queue-shift/issues"
 Repository = "https://github.com/finite-sample/queue-shift"
 
 [build-system]
-requires = ["uv_build>=0.11.32,<0.12"]
+requires = ["uv_build>=0.12.3,<0.13"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
