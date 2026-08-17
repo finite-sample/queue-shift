@@ -18,7 +18,7 @@ lint:
 	uvx --from pydoclint==0.9.1 pydoclint src/
 
 test:
-	uv run pytest -q
+	$(PYTHON) -m pytest -q
 
 build:
 	uv build
