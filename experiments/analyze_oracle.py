@@ -196,7 +196,7 @@ def main() -> None:
     print(summary.to_string(index=False, float_format=lambda value: f"{value:.4f}"))
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)
-        summary.to_csv(args.out, index=False)
+        summary.to_csv(args.out, index=False, float_format="%.12g")
     if args.tex:
         write_table(summary, args.tex)
     if args.figure:

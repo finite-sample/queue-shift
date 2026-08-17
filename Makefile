@@ -56,12 +56,12 @@ check-generated:
 	MPLCONFIGDIR=/tmp/queue-shift-matplotlib $(PYTHON) -m experiments.analyze_estimated \
 		results/estimated --out $$tmp/estimated_summary.csv --tex $$tmp/estimated_summary.tex \
 		--figure $$tmp/estimated_validation.pdf --macros $$tmp/estimated_numbers.tex >/dev/null && \
-	diff -q results/oracle_summary.csv $$tmp/oracle_summary.csv >/dev/null && \
-	diff -q results/estimated_summary.csv $$tmp/estimated_summary.csv >/dev/null && \
-	diff -q paper/generated/oracle_summary.tex $$tmp/oracle_summary.tex >/dev/null && \
-	diff -q paper/generated/estimated_summary.tex $$tmp/estimated_summary.tex >/dev/null && \
-	diff -q paper/generated/oracle_numbers.tex $$tmp/oracle_numbers.tex >/dev/null && \
-	diff -q paper/generated/estimated_numbers.tex $$tmp/estimated_numbers.tex >/dev/null && \
+	diff -q results/oracle_summary.csv $$tmp/oracle_summary.csv && \
+	diff -q results/estimated_summary.csv $$tmp/estimated_summary.csv && \
+	diff -q paper/generated/oracle_summary.tex $$tmp/oracle_summary.tex && \
+	diff -q paper/generated/estimated_summary.tex $$tmp/estimated_summary.tex && \
+	diff -q paper/generated/oracle_numbers.tex $$tmp/oracle_numbers.tex && \
+	diff -q paper/generated/estimated_numbers.tex $$tmp/estimated_numbers.tex && \
 	rm -rf $$tmp && echo "generated results are synchronized"
 
 paper:
