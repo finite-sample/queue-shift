@@ -53,8 +53,11 @@ dev = [
     { include-group = "test" },
 ]
 test = [
+    "matplotlib>=3.9",
+    "pandas>=2.2",
     "pytest>=8",
     "pytest-cov>=6",
+    "scikit-learn>=1.5",
 ]
 
 [tool.ruff]

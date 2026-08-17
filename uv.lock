@@ -1042,16 +1042,22 @@ experiments = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "matplotlib" },
+    { name = "pandas" },
     { name = "pre-commit" },
     { name = "pypdf" },
     { name = "pyright" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
+    { name = "scikit-learn" },
 ]
 test = [
+    { name = "matplotlib" },
+    { name = "pandas" },
     { name = "pytest" },
     { name = "pytest-cov" },
+    { name = "scikit-learn" },
 ]
 
 [package.metadata]
@@ -1066,16 +1072,22 @@ provides-extras = ["experiments"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "matplotlib", specifier = ">=3.9" },
+    { name = "pandas", specifier = ">=2.2" },
     { name = "pre-commit", specifier = ">=4" },
     { name = "pypdf", specifier = ">=5" },
     { name = "pyright", specifier = ">=1.1.390" },
     { name = "pytest", specifier = ">=8" },
     { name = "pytest-cov", specifier = ">=6" },
     { name = "ruff", specifier = ">=0.16.1" },
+    { name = "scikit-learn", specifier = ">=1.5" },
 ]
 test = [
+    { name = "matplotlib", specifier = ">=3.9" },
+    { name = "pandas", specifier = ">=2.2" },
     { name = "pytest", specifier = ">=8" },
     { name = "pytest-cov", specifier = ">=6" },
+    { name = "scikit-learn", specifier = ">=1.5" },
 ]
 
 [[package]]
