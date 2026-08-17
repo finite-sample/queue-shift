@@ -1,0 +1,12 @@
+cff-version: 1.2.0
+message: "If you use Queue Shift, please cite this repository and the paper."
+title: "Queue Shift: Updating Classifiers Under a Staffing Budget"
+type: software
+authors:
+  - family-names: Sood
+    given-names: Gaurav
+    email: gsood07@gmail.com
+version: 0.1.0
+date-released: 2026-08-17
+license: MIT
+repository-code: "https://github.com/finite-sample/queue-shift"
