@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.0 - 2026-08-17
 
 - Define queue shift as incumbent-relative workload movement across predicted queues.
 - Add an exact minimum-cost-flow assignment solver and matched-budget guarantee.
