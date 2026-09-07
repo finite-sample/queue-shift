@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   package:
-    uses: gojiplus/py-canon/.github/workflows/reusable-ci.yml@07c6621880b82afd28ab7230eab6e79f96d080e3 # v1
+    uses: gojiplus/py-canon/.github/workflows/reusable-ci.yml@b17ef8a96fb6afe3003d38cdec83afabe3ec9111 # v1
     with:
       wheel-import: queue_shift
 
