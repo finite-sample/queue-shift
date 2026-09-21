@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
   schedule:
     - cron: "17 6 * * 1"
 
@@ -16,7 +17,7 @@ concurrency:
 
 jobs:
   package:
-    uses: gojiplus/py-canon/.github/workflows/reusable-ci.yml@07c6621880b82afd28ab7230eab6e79f96d080e3 # v1
+    uses: gojiplus/py-canon/.github/workflows/reusable-ci.yml@6381ef50660166e3836a2e687f81b5f9b5640b2e # v1
     with:
       wheel-import: queue_shift
 
@@ -25,7 +26,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
       - name: Sync environment
         run: uv sync --frozen --all-groups --all-extras
       - name: Install TeX
@@ -33,4 +34,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes texlive-latex-extra texlive-bibtex-extra
       - name: Check research artifacts
-        run: make research-check
+        run: |
+          uv run pytest experiments/tests
+          make research-check
