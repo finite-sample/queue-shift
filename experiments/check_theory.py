@@ -6,7 +6,12 @@ import itertools
 
 import numpy as np
 
-from queue_shift.assignment import queue_shift, solve_assignment
+from queue_shift.assignment import (
+    case_flip_weights,
+    flip_load,
+    queue_shift,
+    solve_assignment,
+)
 
 
 def check_net_queue_shift() -> None:
@@ -74,7 +79,7 @@ def check_matched_movement_dominance() -> None:
         budget = queue_shift(baseline_loads, incumbent_loads)
         score = rng.dirichlet(np.ones(n_queues), size=n_cases)
         truth = rng.dirichlet(np.ones(n_queues), size=n_cases)
-        exact = solve_assignment(1 - score, incumbent_loads, budget)
+        exact = solve_assignment(1 - score, incumbent, budget)
 
         baseline_value = score[np.arange(n_cases), baseline].mean()
         exact_value = score[np.arange(n_cases), exact.labels].mean()
@@ -83,10 +88,11 @@ def check_matched_movement_dominance() -> None:
             - truth[np.arange(n_cases), baseline]
         ).mean()
         error = truth - score
+        differ = exact.labels != baseline
         penalty = (
             np.abs(error[np.arange(n_cases), exact.labels])
             + np.abs(error[np.arange(n_cases), baseline])
-        ).mean()
+        )[differ].sum() / n_cases
 
         feasible_values = []
         for labels in itertools.product(range(n_queues), repeat=n_cases):
@@ -109,11 +115,102 @@ def check_matched_movement_dominance() -> None:
         raise AssertionError("positive control did not break the false one-error bound")
 
 
+def check_joint_dominance() -> None:
+    """Verify dominance at matched queue shift and matched expected flips."""
+    rng = np.random.default_rng(461)
+    for _ in range(150):
+        n_cases = int(rng.integers(2, 8))
+        n_queues = int(rng.integers(2, 4))
+        incumbent = rng.integers(0, n_queues, size=n_cases)
+        baseline = rng.integers(0, n_queues, size=n_cases)
+        score = rng.dirichlet(np.ones(n_queues), size=n_cases)
+        incumbent_loads = np.bincount(incumbent, minlength=n_queues)
+        budget = queue_shift(np.bincount(baseline, minlength=n_queues), incumbent_loads)
+        weights = case_flip_weights(score, incumbent, "expected_negative")
+        flip_budget = flip_load(baseline, incumbent, weights)
+        exact = solve_assignment(
+            1 - score,
+            incumbent,
+            budget,
+            flip_weights=weights,
+            flip_budget=flip_budget,
+        )
+        best = max(
+            score[np.arange(n_cases), labels].sum()
+            for labels in map(
+                np.asarray, itertools.product(range(n_queues), repeat=n_cases)
+            )
+            if queue_shift(np.bincount(labels, minlength=n_queues), incumbent_loads)
+            <= budget
+            and flip_load(labels, incumbent, weights) <= flip_budget + 1e-12
+        )
+        exact_value = score[np.arange(n_cases), exact.labels].sum()
+        if abs(exact_value - best) > 1e-8:
+            raise AssertionError("joint solver missed the exhaustive optimum")
+        if exact_value < score[np.arange(n_cases), baseline].sum() - 1e-9:
+            raise AssertionError("joint assignment lost to a feasible baseline")
+        if exact.moved_load > budget or exact.flip_load > flip_budget + 1e-6:
+            raise AssertionError("joint assignment exceeded a matched budget")
+
+    # Positive control: matching raw churn instead of expected flips does not bound
+    # expected flips, so a churn-matched optimum can exceed the baseline's.
+    # With two queues the gain from moving, 1 - 2 p_a, already ranks cases by
+    # expected flips, so the control needs a third queue.
+    score = np.array([[0.45, 0.55, 0.00], [0.30, 0.35, 0.35]])
+    incumbent = np.array([0, 0])
+    baseline = np.array([0, 1])
+    weights = case_flip_weights(score, incumbent, "expected_negative")
+    churn_matched = solve_assignment(
+        1 - score,
+        incumbent,
+        1,
+        flip_weights=case_flip_weights(score, incumbent, "churn"),
+        flip_budget=1.0,
+    )
+    if flip_load(churn_matched.labels, incumbent, weights) <= flip_load(
+        baseline, incumbent, weights
+    ):
+        raise AssertionError("positive control did not separate churn from flips")
+
+
+def check_dual_prices() -> None:
+    """Verify that queue prices certify the flow optimum, penalty included."""
+    rng = np.random.default_rng(571)
+    for _ in range(200):
+        n_cases = int(rng.integers(10, 120))
+        n_queues = int(rng.integers(2, 7))
+        score = rng.dirichlet(np.ones(n_queues), size=n_cases)
+        incumbent = rng.integers(0, n_queues, size=n_cases)
+        budget = int(rng.integers(0, n_cases // 2))
+        penalty = float(rng.choice([0.0, 0.2, 1.0]))
+        weights = case_flip_weights(score, incumbent, "expected_negative")
+        result = solve_assignment(
+            1 - score,
+            incumbent,
+            budget,
+            flip_weights=weights,
+            flip_penalty=penalty,
+        )
+        if result.queue_prices is None:
+            raise AssertionError("flow mode did not return queue prices")
+        moved_off = np.arange(n_queues)[None, :] != incumbent[:, None]
+        priced = 1 - score + penalty * weights[:, None] * moved_off
+        priced = priced + result.queue_prices[None, :]
+        chosen = priced[np.arange(n_cases), result.labels]
+        if np.any(chosen > priced.min(axis=1) + 1e-8):
+            raise AssertionError("queue prices do not certify the assignment")
+        tied = (priced <= priced.min(axis=1, keepdims=True) + 1e-8).sum(axis=1) > 1
+        if tied.sum() > n_queues:
+            raise AssertionError("more tied cases than queues")
+
+
 def main() -> None:
     """Run the adversarial checks and their positive controls."""
     check_net_queue_shift()
     check_same_metrics_different_staffing()
     check_matched_movement_dominance()
+    check_joint_dominance()
+    check_dual_prices()
     print("all Queue Shift formal checks passed; the positive controls fired")
 
 

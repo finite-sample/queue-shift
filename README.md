@@ -4,16 +4,19 @@ Classifier updates should respect the cost they actually create. When prediction
 specialized queues, that cost is the change in queue totals, not the number of individual
 predictions that change.
 
-Queue Shift finds the highest-value batch assignment under a limit on queue-load movement. The
-problem is a minimum-cost flow, so the solver returns an integral global optimum. At the movement
-budget produced by any comparison rule, including a negative-flip method, Queue Shift weakly
-improves the accepted model's total probability score. If those probabilities are the true
-conditional probabilities, the result is dominance in conditional expected accuracy.
+Queue Shift finds the highest-value batch assignment under two limits: on work moved between
+queues, counted in cases, hours, or money, and on expected negative flips. With only the movement
+limit, or with a penalty on flips, the problem is a minimum-cost flow with an integral global
+optimum and per-queue prices that reproduce it case by case; hard flip budgets and per-queue
+prices are solved exactly as small integer programs. At the movement and expected flips of any
+comparison rule, including a negative-flip interpolation, Queue Shift has at least the rule's total
+probability score. If those probabilities are the true conditional probabilities, the result is
+dominance in conditional expected accuracy.
 
-The paper proves the result and reports two stable-distribution experiments. The main validation
-estimates both classifiers on finite historical samples, releases the candidate only after an
-independent accuracy win, and tests small samples, weak innovation, overconfidence, and
-underconfidence.
+The paper proves the result and uses simulation to map where the constraint matters. Holding queue
+totals costs little when an update mostly reorders cases and a lot when it moves volume between
+queues. Learned queue prices nearly match exact assignment in accuracy but miss the movement budget
+in most batches.
 
 Read the current manuscript: [Queue Shift: Updating Classifiers Under a Staffing
 Budget](paper/main.pdf).
@@ -29,7 +32,7 @@ uv sync --all-groups --all-extras
 ```python
 import numpy as np
 
-from queue_shift import solve_assignment
+from queue_shift import case_flip_weights, solve_assignment
 
 candidate_probability = np.array(
     [
@@ -38,19 +41,52 @@ candidate_probability = np.array(
         [0.20, 0.30, 0.50],
     ]
 )
-incumbent_loads = np.array([1, 1, 1])
+incumbent_labels = np.array([0, 2, 1])
 
-result = solve_assignment(
+shift_only = solve_assignment(
     costs=1 - candidate_probability,
-    incumbent_loads=incumbent_loads,
+    incumbent_labels=incumbent_labels,
     move_budget=0,
 )
-print(result.labels)
+print(shift_only.labels, shift_only.churn)  # [0 1 2] 2: a swap keeps totals
+
+weights = case_flip_weights(
+    candidate_probability, incumbent_labels, "expected_negative"
+)
+flip_limited = solve_assignment(
+    costs=1 - candidate_probability,
+    incumbent_labels=incumbent_labels,
+    move_budget=0,
+    flip_weights=weights,
+    flip_budget=0.2,
+)
+# [0 2 1] 0.0: the swap would risk 0.1 + 0.3 = 0.4 expected negative flips
+print(flip_limited.labels, flip_limited.flip_load)
 ```
 
-The movement budget is half the L1 distance between the proposed and incumbent queue-load
-vectors. A budget of zero preserves every incumbent queue total while allowing different cases to
-fill those slots.
+The movement budget limits work added to queues beyond their incumbent loads. By default work is
+counted in cases, and the budget equals half the L1 distance between the proposed and incumbent
+queue-load vectors. A budget of zero preserves every incumbent queue total while allowing different
+cases to fill those slots. Pass `queue_costs` to price a case in each queue, for example in average
+handle hours or cost per case; the budget is then in hours or money:
+
+```python
+hours_per_case = np.array([0.5, 1.0, 4.0])
+by_hours = solve_assignment(
+    costs=1 - candidate_probability,
+    incumbent_labels=incumbent_labels,
+    move_budget=2.0,
+    queue_costs=hours_per_case,
+)
+print(by_hours.labels, by_hours.workload_shift)  # [0 1 2] 0.0
+```
+
+Flip weights price a case leaving its incumbent queue. `"expected_negative"` weights a move by
+the candidate's probability that the incumbent was right, so the weighted total is the expected
+number of negative flips; `"churn"` counts every changed label. `flip_budget` caps the total
+exactly (solved as a mixed-integer program). `flip_penalty` instead charges for it, which keeps
+the problem a minimum-cost flow, scales to large batches, and returns per-queue prices
+(`queue_prices`) that reproduce the assignment case by case.
 
 ## Reproduce the paper
 

@@ -1,0 +1,32 @@
+\begin{table}[H]
+\centering
+\caption{Historical queue prices versus exact per-batch assignment}
+\label{tab:offsets}
+\scriptsize
+\begin{tabular}{llrrrr}
+\toprule
+Scenario & Batch & Budget & Overshoot & Over budget & Value gap \\
+ & & (\% cases) & (pp of cases) & (\% batches) & (pp) \\
+\midrule
+Stable & 2,000, fixed mix & 3.2 & 0.72 & 77 & 0.03 \\
+Stable & 300, fixed mix & 4.1 & 1.11 & 75 & 0.04 \\
+Stable & 300, volatile mix & 4.5 & 0.96 & 68 & -0.15 \\
+Stable & 100, volatile mix & 6.5 & 1.61 & 62 & -0.14 \\
+Confused pair & 2,000, fixed mix & 15.7 & 0.15 & 55 & 0.02 \\
+Confused pair & 300, fixed mix & 16.0 & 0.55 & 53 & 0.07 \\
+Confused pair & 300, volatile mix & 15.8 & 0.31 & 54 & -0.03 \\
+Confused pair & 100, volatile mix & 17.0 & 0.68 & 50 & 0.05 \\
+Stale priors & 2,000, fixed mix & 12.7 & 0.66 & 67 & 0.10 \\
+Stale priors & 300, fixed mix & 13.5 & 0.86 & 59 & 0.17 \\
+Stale priors & 300, volatile mix & 13.0 & 0.89 & 67 & -0.02 \\
+Stale priors & 100, volatile mix & 14.3 & 1.54 & 62 & 0.01 \\
+15 specialist queues & 2,000, fixed mix & 4.6 & 1.40 & 93 & 0.03 \\
+15 specialist queues & 300, fixed mix & 7.1 & 1.72 & 82 & 0.01 \\
+15 specialist queues & 300, volatile mix & 7.7 & 2.26 & 92 & -0.07 \\
+15 specialist queues & 100, volatile mix & 10.6 & 3.22 & 80 & -0.04 \\
+\bottomrule
+\end{tabular}
+\begin{minipage}{0.96\linewidth}
+\footnotesize\emph{Note:} Budget is NFR interpolation's queue shift at $\alpha=0.5$. Prices are learned once on a 2,000-case history at the same interpolation weight and applied case by case. Overshoot is the prices' extra queue shift; value gap is the true-accuracy shortfall against the exact assignment at the movement the prices actually used.
+\end{minipage}
+\end{table}

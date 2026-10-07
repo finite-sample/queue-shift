@@ -6,6 +6,7 @@ from typing import Any
 
 BLUE = "#2166AC"
 ORANGE = "#B35806"
+GREEN = "#1B7837"
 GRAY = "#555555"
 LIGHT_GRAY = "#D9D9D9"
 

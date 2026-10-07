@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import numpy as np
 
-from queue_shift.assignment import queue_shift, solve_assignment
+from queue_shift.assignment import (
+    case_flip_weights,
+    flip_load,
+    queue_shift,
+    solve_assignment,
+    workload_shift,
+)
 
 
 def probability_matrix(probability: np.ndarray) -> np.ndarray:
@@ -63,18 +69,77 @@ def select_nfr_alpha(
     return min(feasible, key=lambda alpha: (-accuracies[alpha], alpha))
 
 
+def assignment_metrics(
+    assigned: np.ndarray,
+    incumbent: np.ndarray,
+    labels: np.ndarray,
+    value_probability: np.ndarray,
+    true_probability: np.ndarray | None = None,
+    queue_costs: np.ndarray | None = None,
+) -> dict[str, float | int]:
+    """Return movement, churn, flip, and accuracy measures for one assignment.
+
+    ``expected_flips`` uses ``value_probability``, the signal available when the
+    assignment is chosen; ``true_expected_flips`` uses the true probabilities.
+    """
+    n_cases, n_queues = value_probability.shape
+    rows = np.arange(n_cases)
+    moved = queue_shift(
+        np.bincount(assigned, minlength=n_queues),
+        np.bincount(incumbent, minlength=n_queues),
+    )
+    nfr_count, _, nfr = negative_flip_rate(incumbent, assigned, labels)
+    metrics: dict[str, float | int] = {
+        "moved_load": moved,
+        "move_share": moved / n_cases,
+        "churn": int((assigned != incumbent).sum()),
+        "expected_flips": flip_load(
+            assigned,
+            incumbent,
+            case_flip_weights(value_probability, incumbent, "expected_negative"),
+        ),
+        "accuracy": float((assigned == labels).mean()),
+        "common_value": float(value_probability[rows, assigned].mean()),
+        "nfr_count": nfr_count,
+        "nfr": nfr,
+    }
+    if queue_costs is not None:
+        metrics["workload_shift"] = workload_shift(
+            np.bincount(assigned, minlength=n_queues),
+            np.bincount(incumbent, minlength=n_queues),
+            queue_costs,
+        )
+    if true_probability is not None:
+        metrics["true_value"] = float(true_probability[rows, assigned].mean())
+        metrics["true_expected_flips"] = flip_load(
+            assigned,
+            incumbent,
+            case_flip_weights(true_probability, incumbent, "expected_negative"),
+        )
+    return metrics
+
+
 def evaluate_matched_budget(
     incumbent_prediction: np.ndarray,
     baseline_probability: np.ndarray,
     value_probability: np.ndarray,
     labels: np.ndarray,
     true_probability: np.ndarray | None = None,
+    include_joint: bool = True,
+    extra_assignments: dict[str, np.ndarray] | None = None,
+    queue_costs: np.ndarray | None = None,
 ) -> dict[str, float | int]:
-    """Compare a baseline assignment with the operational optimum at its queue shift.
+    """Compare a baseline assignment with exact assignments at its constraints.
 
-    ``value_probability`` is the common value signal, normally the unconstrained
-    improved model. The exact assignment uses no labels. Labels enter only after
-    both assignments have been fixed and measure realized performance.
+    ``operational`` matches the baseline's queue shift only. ``joint`` also matches
+    its expected negative flips under ``value_probability``; it needs a MILP, so
+    ``include_joint=False`` skips it for large batches. ``value_probability`` is
+    the common value signal, normally the unconstrained improved model. The exact
+    assignments use no labels. Labels enter only after every assignment is fixed and
+    measure realized performance. ``extra_assignments`` are summarized with the same
+    measures but carry no dominance guarantee. ``queue_costs`` prices one case in
+    each queue (for example handle hours); the matched movement budget is then the
+    baseline's :func:`~queue_shift.assignment.workload_shift` in that currency.
     """
     incumbent = np.asarray(incumbent_prediction, dtype=int)
     baseline_prob = probability_matrix(baseline_probability)
@@ -93,76 +158,86 @@ def evaluate_matched_budget(
     if np.any(y < 0) or np.any(y >= n_queues):
         raise ValueError("labels contain an unknown class")
 
+    rows = np.arange(n_cases)
     baseline = baseline_prob.argmax(axis=1)
-    incumbent_loads = np.bincount(incumbent, minlength=n_queues)
     baseline_loads = np.bincount(baseline, minlength=n_queues)
-    budget = queue_shift(baseline_loads, incumbent_loads)
-    operational = solve_assignment(1 - value_prob, incumbent_loads, budget)
+    incumbent_loads = np.bincount(incumbent, minlength=n_queues)
+    budget: float = queue_shift(baseline_loads, incumbent_loads)
+    if queue_costs is not None:
+        budget = workload_shift(baseline_loads, incumbent_loads, queue_costs)
+    weights = case_flip_weights(value_prob, incumbent, "expected_negative")
+    flip_budget = flip_load(baseline, incumbent, weights)
+    assignments = {
+        "baseline": baseline,
+        "operational": solve_assignment(
+            1 - value_prob, incumbent, budget, queue_costs=queue_costs
+        ).labels,
+    }
+    if include_joint:
+        assignments["joint"] = solve_assignment(
+            1 - value_prob,
+            incumbent,
+            budget,
+            flip_weights=weights,
+            flip_budget=flip_budget,
+            queue_costs=queue_costs,
+        ).labels
+    for name, assigned in (extra_assignments or {}).items():
+        if name in assignments:
+            raise ValueError(f"extra assignment name {name!r} is reserved")
+        if np.shape(assigned) != (n_cases,):
+            raise ValueError("extra assignments must contain one label per case")
+        assignments[name] = np.asarray(assigned, dtype=int)
 
-    baseline_accuracy = float((baseline == y).mean())
-    operational_accuracy = float((operational.labels == y).mean())
-    baseline_value = float(value_prob[np.arange(n_cases), baseline].mean())
-    operational_value = float(value_prob[np.arange(n_cases), operational.labels].mean())
-    baseline_nfr_count, incumbent_correct, baseline_nfr = negative_flip_rate(
-        incumbent, baseline, y
-    )
-    operational_nfr_count, _, operational_nfr = negative_flip_rate(
-        incumbent, operational.labels, y
-    )
-
-    predicted_gain = 100 * (operational_value - baseline_value)
-    if predicted_gain < -1e-7:
-        raise RuntimeError(
-            "operational assignment is worse under the common value signal"
-        )
-
-    output = {
+    truth = None if true_probability is None else probability_matrix(true_probability)
+    if truth is not None and truth.shape != value_prob.shape:
+        raise ValueError("true and value probabilities must have the same shape")
+    _, incumbent_correct, _ = negative_flip_rate(incumbent, incumbent, y)
+    output: dict[str, float | int] = {
         "n_cases": n_cases,
         "move_budget": budget,
-        "baseline_moved_load": budget,
-        "operational_moved_load": operational.moved_load,
-        "baseline_move_share": budget / n_cases,
-        "operational_move_share": operational.moved_load / n_cases,
-        "baseline_churn": int((baseline != incumbent).sum()),
-        "operational_churn": int((operational.labels != incumbent).sum()),
-        "baseline_accuracy": baseline_accuracy,
-        "operational_accuracy": operational_accuracy,
-        "realized_gain_pp": 100 * (operational_accuracy - baseline_accuracy),
-        "baseline_common_value": baseline_value,
-        "operational_common_value": operational_value,
-        "predicted_gain_pp": max(0.0, predicted_gain),
+        "flip_budget": flip_budget,
         "incumbent_correct": incumbent_correct,
-        "baseline_nfr_count": baseline_nfr_count,
-        "operational_nfr_count": operational_nfr_count,
-        "baseline_nfr": baseline_nfr,
-        "operational_nfr": operational_nfr,
     }
-    if true_probability is not None:
-        truth = probability_matrix(true_probability)
-        if truth.shape != value_prob.shape:
-            raise ValueError("true and value probabilities must have the same shape")
-        baseline_true_value = float(truth[np.arange(n_cases), baseline].mean())
-        operational_true_value = float(
-            truth[np.arange(n_cases), operational.labels].mean()
+    for name, assigned in assignments.items():
+        metrics = assignment_metrics(
+            assigned, incumbent, y, value_prob, truth, queue_costs
         )
+        output.update({f"{name}_{key}": value for key, value in metrics.items()})
+
+    for name in ("operational", "joint")[: 2 if include_joint else 1]:
+        assigned = assignments[name]
+        predicted_gain = 100 * (
+            output[f"{name}_common_value"] - output["baseline_common_value"]
+        )
+        if predicted_gain < -1e-7:
+            raise RuntimeError(f"{name} assignment is worse under the common score")
+        prefix = "" if name == "operational" else "joint_"
+        output[f"{prefix}predicted_gain_pp"] = max(0.0, predicted_gain)
+        output[f"{prefix}realized_gain_pp"] = 100 * (
+            output[f"{name}_accuracy"] - output["baseline_accuracy"]
+        )
+        if truth is None:
+            continue
+        # Cases with equal labels contribute identical errors to both assignments,
+        # so only the cases where the two assignments differ enter the bound.
+        differ = assigned != baseline
         error = truth - value_prob
         error_penalty = float(
-            (
-                np.abs(error[np.arange(n_cases), operational.labels])
-                + np.abs(error[np.arange(n_cases), baseline])
-            ).mean()
+            (np.abs(error[rows, assigned]) + np.abs(error[rows, baseline]))[
+                differ
+            ].sum()
+            / n_cases
         )
-        true_gain = 100 * (operational_true_value - baseline_true_value)
+        true_gain = 100 * (output[f"{name}_true_value"] - output["baseline_true_value"])
         robust_lower_bound = predicted_gain - 100 * error_penalty
         if true_gain < robust_lower_bound - 1e-8:
             raise RuntimeError("probability-error robustness bound was violated")
         output.update(
             {
-                "baseline_true_value": baseline_true_value,
-                "operational_true_value": operational_true_value,
-                "conditional_gain_pp": true_gain,
-                "score_error_penalty_pp": 100 * error_penalty,
-                "robust_lower_bound_pp": robust_lower_bound,
+                f"{prefix}conditional_gain_pp": true_gain,
+                f"{prefix}score_error_penalty_pp": 100 * error_penalty,
+                f"{prefix}robust_lower_bound_pp": robust_lower_bound,
             }
         )
     return output

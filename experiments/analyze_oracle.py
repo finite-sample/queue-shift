@@ -6,9 +6,10 @@ import argparse
 from pathlib import Path
 
 import matplotlib as mpl
+import numpy as np
 import pandas as pd
 
-from experiments.plot_style import BLUE, GRAY, LIGHT_GRAY, apply_plot_style
+from experiments.plot_style import BLUE, GRAY, GREEN, LIGHT_GRAY, apply_plot_style
 
 mpl.use("Agg")
 import matplotlib.pyplot as plt
@@ -23,10 +24,14 @@ def summarize(release: pd.DataFrame, results: pd.DataFrame) -> pd.DataFrame:
     repetition_means = results.groupby(["repetition", "alpha"], as_index=False).agg(
         mean_move_share=("baseline_move_share", "mean"),
         mean_nfr=("baseline_nfr", "mean"),
+        operational_nfr=("operational_nfr", "mean"),
+        joint_nfr=("joint_nfr", "mean"),
         baseline_accuracy=("baseline_accuracy", "mean"),
         operational_accuracy=("operational_accuracy", "mean"),
+        joint_accuracy=("joint_accuracy", "mean"),
         expected_gain_pp=("predicted_gain_pp", "mean"),
         realized_gain_pp=("realized_gain_pp", "mean"),
+        joint_realized_gain_pp=("joint_realized_gain_pp", "mean"),
     )
     summary = (
         repetition_means.groupby("alpha", as_index=False)
@@ -34,10 +39,16 @@ def summarize(release: pd.DataFrame, results: pd.DataFrame) -> pd.DataFrame:
             repetitions=("realized_gain_pp", "size"),
             mean_move_share=("mean_move_share", "mean"),
             mean_nfr=("mean_nfr", "mean"),
+            operational_nfr=("operational_nfr", "mean"),
+            joint_nfr=("joint_nfr", "mean"),
             baseline_accuracy=("baseline_accuracy", "mean"),
             baseline_accuracy_se=("baseline_accuracy", "sem"),
             operational_accuracy=("operational_accuracy", "mean"),
             operational_accuracy_se=("operational_accuracy", "sem"),
+            joint_accuracy=("joint_accuracy", "mean"),
+            joint_accuracy_se=("joint_accuracy", "sem"),
+            joint_realized_gain_pp=("joint_realized_gain_pp", "mean"),
+            joint_realized_gain_se=("joint_realized_gain_pp", "sem"),
             expected_gain_pp=("expected_gain_pp", "mean"),
             realized_gain_pp=("realized_gain_pp", "mean"),
             realized_gain_se=("realized_gain_pp", "sem"),
@@ -52,6 +63,10 @@ def summarize(release: pd.DataFrame, results: pd.DataFrame) -> pd.DataFrame:
         raise RuntimeError("operational assignment exceeded a matched movement budget")
     if (results["predicted_gain_pp"] < -1e-9).any():
         raise RuntimeError("operational assignment violated expected-value dominance")
+    if (results["joint_moved_load"] > results["baseline_moved_load"]).any():
+        raise RuntimeError("joint assignment exceeded a matched movement budget")
+    if (results["joint_predicted_gain_pp"] < -1e-9).any():
+        raise RuntimeError("joint assignment violated expected-value dominance")
     summary["planning_batches"] = results.groupby("alpha").size().to_numpy()
     summary["movement_violations"] = 0
     summary.attrs["acceptance_rate"] = float(release["accepted"].mean())
@@ -67,8 +82,10 @@ def write_table(summary: pd.DataFrame, path: Path) -> None:
     rows = [
         (
             f"{row.alpha:.1f} & {100 * row.mean_move_share:.2f} & "
-            f"{100 * row.mean_nfr:.2f} & {100 * row.baseline_accuracy:.2f} & "
-            f"{100 * row.operational_accuracy:.2f} & {row.realized_gain_pp:.2f} \\\\"
+            f"{100 * row.mean_nfr:.2f} & {100 * row.operational_nfr:.2f} & "
+            f"{100 * row.joint_nfr:.2f} & {100 * row.baseline_accuracy:.2f} & "
+            f"{100 * row.operational_accuracy:.2f} & "
+            f"{100 * row.joint_accuracy:.2f} \\\\"
         )
         for row in selected.itertuples(index=False)
     ]
@@ -76,19 +93,20 @@ def write_table(summary: pd.DataFrame, path: Path) -> None:
         [
             r"\begin{table}[H]",
             r"\centering",
-            r"\caption{NFR interpolation versus exact assignment at the same queue shift}",
+            r"\caption{NFR interpolation versus exact assignment at matched constraints}",
             r"\label{tab:stable-update}",
             r"\small",
-            r"\begin{tabular}{rrrrrr}",
+            r"\begin{tabular}{rrrrrrrr}",
             r"\toprule",
-            "Interpolation & Queue shift & NFR & NFR path & Exact assignment & Gain \\\\",
-            "$\\alpha$ & (\\%) & (\\%) & accuracy (\\%) & accuracy (\\%) & (pp) \\\\",
+            r" & Queue & \multicolumn{3}{c}{NFR (\%)} & \multicolumn{3}{c}{Accuracy (\%)} \\",
+            r"\cmidrule(lr){3-5}\cmidrule(lr){6-8}",
+            r"$\alpha$ & shift (\%) & Interp. & QS & QS+flips & Interp. & QS & QS+flips \\",
             r"\midrule",
             *rows,
             r"\bottomrule",
             r"\end{tabular}",
             r"\begin{minipage}{0.94\linewidth}",
-            r"\footnotesize\emph{Note:} The data-generating process is fixed across release and planning samples. The candidate observes an additional independent signal and is deployed only after beating the incumbent on an independent out-of-sample release set. Each row compares probability interpolation with the exact assignment using the candidate posterior at the interpolation point's realized queue shift. Results average 1,000 planning batches from 200 accepted updates. Percentage-point gains use labels revealed only after both assignments are fixed.",
+            r"\footnotesize\emph{Note:} The data-generating process is fixed across release and planning samples. The candidate observes an additional independent signal and is deployed only after beating the incumbent on an independent out-of-sample release set. Each row compares probability interpolation (Interp.) with exact assignment under the candidate posterior at the interpolation point's queue shift (QS), and at both its queue shift and its expected negative flips (QS+flips). Results average 1,000 planning batches from 200 accepted updates. Accuracy and NFR use labels revealed only after every assignment is fixed.",
             r"\end{minipage}",
             r"\end{table}",
             "",
@@ -134,6 +152,16 @@ def write_figure(summary: pd.DataFrame, path: Path) -> None:
     )
     axis.plot(
         x,
+        100 * summary["joint_accuracy"].to_numpy(),
+        color=GREEN,
+        marker="D",
+        markersize=3.2,
+        linewidth=1.4,
+        linestyle="-.",
+        label="Exact assignment, matched flips",
+    )
+    axis.plot(
+        x,
         baseline,
         color=GRAY,
         marker="s",
@@ -158,6 +186,7 @@ def write_macros(release: pd.DataFrame, summary: pd.DataFrame, path: Path) -> No
     """Write manuscript numbers from the same computed summaries."""
     zero = summary.loc[summary["alpha"] == 0].iloc[0]
     midpoint = summary.loc[summary["alpha"] == 0.5].iloc[0]
+    low = summary.loc[np.isclose(summary["alpha"], 0.2)].iloc[0]
     content = "\n".join(
         [
             f"\\newcommand{{\\ReleaseAcceptance}}{{{100 * release['accepted'].mean():.0f}\\%}}",
@@ -165,6 +194,10 @@ def write_macros(release: pd.DataFrame, summary: pd.DataFrame, path: Path) -> No
             f"\\newcommand{{\\ZeroMoveGain}}{{{zero.realized_gain_pp:.2f}}}",
             f"\\newcommand{{\\MidMoveShare}}{{{100 * midpoint.mean_move_share:.2f}\\%}}",
             f"\\newcommand{{\\MidOperationalGain}}{{{midpoint.realized_gain_pp:.2f}}}",
+            f"\\newcommand{{\\ZeroMoveOperationalNFR}}{{{100 * zero.operational_nfr:.1f}\\%}}",
+            f"\\newcommand{{\\LowAlphaJointGain}}{{{low.joint_realized_gain_pp:.2f}}}",
+            f"\\newcommand{{\\LowAlphaJointNFR}}{{{100 * low.joint_nfr:.1f}\\%}}",
+            f"\\newcommand{{\\LowAlphaInterpNFR}}{{{100 * low.mean_nfr:.1f}\\%}}",
             "",
         ]
     )
