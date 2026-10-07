@@ -11,9 +11,11 @@ candidate uses the incumbent block plus a new signal block. The candidate is rel
 is more accurate on an independent labeled release sample.
 
 On later, unlabeled planning batches, the comparison policy interpolates the incumbent and
-candidate probabilities. This is the strong negative-flip-rate baseline. For every interpolation
-weight, Queue Shift receives exactly the queue-movement budget used by the baseline. Both policies
-are scored only after their assignments are fixed.
+candidate probabilities. This is the negative-flip-rate baseline. For every interpolation weight,
+Queue Shift is solved twice: with exactly the baseline's queue-movement budget, and with that
+budget plus the baseline's expected negative flips under the candidate's probabilities. All
+policies are scored only after their assignments are fixed, and every table reports the realized
+negative-flip rate of every policy.
 
 The main reported quantity is the mean accuracy difference, in percentage points, between Queue
 Shift and interpolation at the same queue movement. Planning batches are averaged within each
@@ -43,10 +45,12 @@ hard predictions or release decision.
 
 The code verifies four statements without sampling tolerance beyond numerical precision:
 
-1. Queue Shift never exceeds the baseline's queue movement.
-2. Queue Shift never has lower value under the supplied candidate probabilities.
+1. Neither Queue Shift arm exceeds the baseline's queue movement, and the flip-matched arm never
+   exceeds the baseline's expected negative flips (up to solver tolerance).
+2. Neither arm has lower value under the supplied candidate probabilities.
 3. The raw-candidate endpoint has zero supplied-score gain.
-4. The probability-error lower bound never exceeds the true conditional expected gain.
+4. The probability-error lower bound, summed over cases where the two assignments differ, never
+   exceeds the true conditional expected gain.
 
 The analysis reports repetition-level means and 95% normal intervals for conditional expected and
 realized accuracy. Acceptance rates are reported because rejected candidate models do not enter

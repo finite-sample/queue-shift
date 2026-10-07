@@ -1,0 +1,32 @@
+\begin{table}[H]
+\centering
+\caption{Cost of holding every incumbent queue total}
+\label{tab:lock-cost}
+\scriptsize
+\begin{tabular}{llrrr}
+\toprule
+Scenario & Batch & Raw update & Cost of zero movement & Update kept \\
+ & & (pp) & (pp) [95\% CI] & (\%) \\
+\midrule
+Stable & 2,000, fixed mix & 8.12 & 0.51 [0.43, 0.58] & 94 \\
+Stable & 300, fixed mix & 8.15 & 0.70 [0.57, 0.82] & 91 \\
+Stable & 300, volatile mix & 8.16 & 1.24 [1.02, 1.46] & 85 \\
+Stable & 100, volatile mix & 8.58 & 2.06 [1.58, 2.54] & 76 \\
+Confused pair & 2,000, fixed mix & 15.45 & 4.97 [4.43, 5.51] & 68 \\
+Confused pair & 300, fixed mix & 15.66 & 5.14 [4.61, 5.68] & 67 \\
+Confused pair & 300, volatile mix & 15.52 & 5.45 [4.37, 6.53] & 65 \\
+Confused pair & 100, volatile mix & 15.68 & 6.12 [5.24, 6.99] & 61 \\
+Stale priors & 2,000, fixed mix & 12.13 & 4.71 [4.48, 4.94] & 61 \\
+Stale priors & 300, fixed mix & 12.22 & 4.91 [4.64, 5.17] & 60 \\
+Stale priors & 300, volatile mix & 11.74 & 5.14 [4.34, 5.94] & 56 \\
+Stale priors & 100, volatile mix & 12.70 & 6.45 [5.71, 7.20] & 49 \\
+15 specialist queues & 2,000, fixed mix & 9.02 & 0.34 [0.28, 0.40] & 96 \\
+15 specialist queues & 300, fixed mix & 8.86 & 0.82 [0.72, 0.92] & 91 \\
+15 specialist queues & 300, volatile mix & 9.15 & 2.06 [1.75, 2.37] & 78 \\
+15 specialist queues & 100, volatile mix & 9.83 & 3.12 [2.67, 3.57] & 68 \\
+\bottomrule
+\end{tabular}
+\begin{minipage}{0.96\linewidth}
+\footnotesize\emph{Note:} Raw update is the raw candidate's true accuracy gain over the incumbent. Cost of zero movement is the raw candidate's true accuracy minus that of Queue Shift at $B=0$. True accuracy uses the simulation's conditional probabilities.
+\end{minipage}
+\end{table}

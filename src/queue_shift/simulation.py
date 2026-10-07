@@ -51,8 +51,8 @@ def draw_stable_batch(
     rng: np.random.Generator,
     n_cases: int,
     priors: np.ndarray,
-    incumbent_signal: float,
-    innovation_signal: float,
+    incumbent_signal: float | np.ndarray,
+    innovation_signal: float | np.ndarray,
 ) -> StableBatch:
     """Draw one batch from a fixed Gaussian classification problem.
 
@@ -78,17 +78,29 @@ def draw_stable_feature_batch(
     rng: np.random.Generator,
     n_cases: int,
     priors: np.ndarray,
-    incumbent_signal: float,
-    innovation_signal: float,
+    incumbent_signal: float | np.ndarray,
+    innovation_signal: float | np.ndarray,
 ) -> StableFeatureBatch:
-    """Draw features and true posteriors from the unchanged Gaussian problem."""
+    """Draw features and true posteriors from the unchanged Gaussian problem.
+
+    Feature ``j`` of each block is shifted by that block's signal for class ``j``
+    when the case belongs to class ``j``. A scalar signal applies to every class; a
+    vector gives class-specific separability, so a block can leave some classes
+    confused while separating others.
+    """
     class_priors = validate_priors(priors)
     if not isinstance(n_cases, (int, np.integer)) or n_cases <= 0:
         raise ValueError("n_cases must be a positive integer")
-    if incumbent_signal < 0 or innovation_signal < 0:
+    n_queues = len(class_priors)
+    incumbent_signal = np.broadcast_to(
+        np.asarray(incumbent_signal, dtype=float), (n_queues,)
+    )
+    innovation_signal = np.broadcast_to(
+        np.asarray(innovation_signal, dtype=float), (n_queues,)
+    )
+    if np.any(incumbent_signal < 0) or np.any(innovation_signal < 0):
         raise ValueError("signal strengths must be nonnegative")
 
-    n_queues = len(class_priors)
     labels = rng.choice(n_queues, size=n_cases, p=class_priors)
     class_indicator = np.eye(n_queues)[labels]
     incumbent_features = rng.normal(size=(n_cases, n_queues))
@@ -149,8 +161,9 @@ def evaluate_interpolation_path(
     batch: StableBatch,
     alphas: np.ndarray,
     true_probability: np.ndarray | None = None,
+    include_joint: bool = True,
 ) -> list[dict[str, float | int]]:
-    """Match each NFR interpolation point to an equal-movement exact solution."""
+    """Match each NFR interpolation point to equal-constraint exact solutions."""
     alpha_grid = np.asarray(alphas, dtype=float)
     if alpha_grid.ndim != 1 or len(alpha_grid) == 0:
         raise ValueError("alphas must be a nonempty vector")
@@ -169,6 +182,7 @@ def evaluate_interpolation_path(
             batch.candidate_probability,
             batch.labels,
             true_probability=true_probability,
+            include_joint=include_joint,
         )
         row["alpha"] = float(alpha)
         rows.append(row)

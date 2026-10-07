@@ -43,6 +43,13 @@ def summarize(release: pd.DataFrame, results: pd.DataFrame) -> pd.DataFrame:
         raise RuntimeError("an exact assignment exceeded its matched movement budget")
     if (results["predicted_gain_pp"] < -1e-9).any():
         raise RuntimeError("supplied-score dominance failed")
+    joint_budget_slack = 2e-6 * (1 + results["n_cases"])
+    if (
+        results["joint_expected_flips"] > results["flip_budget"] + joint_budget_slack
+    ).any():
+        raise RuntimeError("a joint assignment exceeded its matched flip budget")
+    if (results["joint_predicted_gain_pp"] < -1e-9).any():
+        raise RuntimeError("joint supplied-score dominance failed")
     if (results["conditional_gain_pp"] < results["robust_lower_bound_pp"] - 1e-8).any():
         raise RuntimeError("the probability-error lower bound failed")
     endpoint = results[results["alpha"] == 1.0]
@@ -54,6 +61,9 @@ def summarize(release: pd.DataFrame, results: pd.DataFrame) -> pd.DataFrame:
     ).agg(
         move_share=("baseline_move_share", "mean"),
         nfr=("baseline_nfr", "mean"),
+        operational_nfr=("operational_nfr", "mean"),
+        joint_nfr=("joint_nfr", "mean"),
+        joint_conditional_gain_pp=("joint_conditional_gain_pp", "mean"),
         predicted_gain_pp=("predicted_gain_pp", "mean"),
         conditional_gain_pp=("conditional_gain_pp", "mean"),
         realized_gain_pp=("realized_gain_pp", "mean"),
@@ -63,6 +73,10 @@ def summarize(release: pd.DataFrame, results: pd.DataFrame) -> pd.DataFrame:
         repetitions=("realized_gain_pp", "size"),
         move_share=("move_share", "mean"),
         nfr=("nfr", "mean"),
+        operational_nfr=("operational_nfr", "mean"),
+        joint_nfr=("joint_nfr", "mean"),
+        joint_conditional_gain_pp=("joint_conditional_gain_pp", "mean"),
+        joint_conditional_gain_se=("joint_conditional_gain_pp", "sem"),
         predicted_gain_pp=("predicted_gain_pp", "mean"),
         conditional_gain_pp=("conditional_gain_pp", "mean"),
         conditional_gain_se=("conditional_gain_pp", "sem"),
@@ -89,17 +103,20 @@ def write_table(summary: pd.DataFrame, path: Path) -> None:
     selected = summary[summary["alpha"].isin([0.0, 0.5, 1.0])]
     rows = []
     for row in selected.itertuples(index=False):
-        conditional_low = row.conditional_gain_pp - 1.96 * row.conditional_gain_se
-        conditional_high = row.conditional_gain_pp + 1.96 * row.conditional_gain_se
-        realized_low = row.realized_gain_pp - 1.96 * row.realized_gain_se
-        realized_high = row.realized_gain_pp + 1.96 * row.realized_gain_se
+        qs_low = row.conditional_gain_pp - 1.96 * row.conditional_gain_se
+        qs_high = row.conditional_gain_pp + 1.96 * row.conditional_gain_se
+        joint_low = row.joint_conditional_gain_pp - 1.96 * row.joint_conditional_gain_se
+        joint_high = (
+            row.joint_conditional_gain_pp + 1.96 * row.joint_conditional_gain_se
+        )
         rows.append(
             f"{SCENARIO_LABELS[row.scenario]} & {row.alpha:.1f} & "
             f"{100 * row.move_share:.2f} & "
-            f"{row.predicted_gain_pp:.2f} & "
-            f"{row.conditional_gain_pp:.2f} "
-            f"[{conditional_low:.2f}, {conditional_high:.2f}] & "
-            f"{row.realized_gain_pp:.2f} [{realized_low:.2f}, {realized_high:.2f}] \\\\"
+            f"{100 * row.nfr:.1f} & {100 * row.operational_nfr:.1f} & "
+            f"{100 * row.joint_nfr:.1f} & "
+            f"{row.conditional_gain_pp:.2f} [{qs_low:.2f}, {qs_high:.2f}] & "
+            f"{row.joint_conditional_gain_pp:.2f} "
+            f"[{joint_low:.2f}, {joint_high:.2f}] \\\\"
         )
     content = "\n".join(
         [
@@ -108,13 +125,14 @@ def write_table(summary: pd.DataFrame, path: Path) -> None:
             r"\caption{Estimated-model validation against NFR interpolation}",
             r"\label{tab:estimated-validation}",
             r"\scriptsize",
-            r"\begin{tabular}{lrrrrr}",
+            r"\begin{tabular}{lrrrrrrr}",
             r"\toprule",
             (
-                r"Scenario & $\alpha$ & Shift (\%) & Score gain & "
-                r"True gain [95\% CI] & Realized gain [95\% CI] \\"
+                r" & & Shift & \multicolumn{3}{c}{NFR (\%)} & "
+                r"\multicolumn{2}{c}{True gain over interp. (pp) [95\% CI]} \\"
             ),
-            r" & & & (pp) & (pp) & (pp) \\",
+            r"\cmidrule(lr){4-6}\cmidrule(lr){7-8}",
+            r"Scenario & $\alpha$ & (\%) & Interp. & QS & QS+flips & QS & QS+flips \\",
             r"\midrule",
             *rows,
             r"\bottomrule",
@@ -125,8 +143,9 @@ def write_table(summary: pd.DataFrame, path: Path) -> None:
                 r"estimated on historical samples and released only after the candidate "
                 r"wins on an independent labeled sample. Each row compares exact "
                 r"assignment with probability interpolation at the same realized queue "
-                r"shift. True gain uses the simulation's conditional probabilities and "
-                r"is unavailable in applications. Results average four planning batches "
+                r"shift (QS), and at both its queue shift and its expected negative flips "
+                r"(QS+flips). True gain uses the simulation's conditional "
+                r"probabilities and is unavailable in applications. Results average four planning batches "
                 r"within each independently trained accepted update before averaging "
                 r"across updates."
             ),
