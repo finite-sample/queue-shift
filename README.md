@@ -1,4 +1,4 @@
-# Queue Shift
+# queue shift: update your classifier without overwhelming your queues
 
 Classifier updates should respect the cost they actually create. When predictions route cases to
 specialized queues, that cost is the change in queue totals, not the number of individual
