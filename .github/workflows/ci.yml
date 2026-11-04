@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   package:
-    uses: gojiplus/py-canon/.github/workflows/reusable-ci.yml@21622c7d616fa4ae611f13e15db49764bae169d1 # v1
+    uses: gojiplus/py-canon/.github/workflows/reusable-ci.yml@e80fe3196b42652ecedf974c58be67b12a6ac74d # v1
     with:
       wheel-import: queue_shift
       python-versions: '["3.11", "3.12", "3.13", "3.14"]'
@@ -27,7 +27,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
       - name: Sync environment
         run: uv sync --frozen --all-groups --all-extras
       - name: Install TeX
