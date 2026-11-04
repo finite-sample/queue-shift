@@ -33,6 +33,7 @@ def summarize(release: pd.DataFrame, results: pd.DataFrame) -> pd.DataFrame:
         realized_gain_pp=("realized_gain_pp", "mean"),
         joint_realized_gain_pp=("joint_realized_gain_pp", "mean"),
     )
+    # Gains are percentage points; tied repetitions can retain ~1e-14 roundoff.
     summary = (
         repetition_means.groupby("alpha", as_index=False)
         .agg(
@@ -52,7 +53,7 @@ def summarize(release: pd.DataFrame, results: pd.DataFrame) -> pd.DataFrame:
             expected_gain_pp=("expected_gain_pp", "mean"),
             realized_gain_pp=("realized_gain_pp", "mean"),
             realized_gain_se=("realized_gain_pp", "sem"),
-            positive_repetition_share=("realized_gain_pp", lambda x: (x > 0).mean()),
+            positive_repetition_share=("realized_gain_pp", lambda x: (x > 1e-9).mean()),
         )
         .sort_values("alpha")
     )

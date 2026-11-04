@@ -69,6 +69,7 @@ def summarize(release: pd.DataFrame, results: pd.DataFrame) -> pd.DataFrame:
         realized_gain_pp=("realized_gain_pp", "mean"),
         robust_lower_bound_pp=("robust_lower_bound_pp", "mean"),
     )
+    # Gains are percentage points; tied repetitions can retain ~1e-14 roundoff.
     summary = repetition.groupby(["scenario", "alpha"], as_index=False).agg(
         repetitions=("realized_gain_pp", "size"),
         move_share=("move_share", "mean"),
@@ -82,7 +83,7 @@ def summarize(release: pd.DataFrame, results: pd.DataFrame) -> pd.DataFrame:
         conditional_gain_se=("conditional_gain_pp", "sem"),
         realized_gain_pp=("realized_gain_pp", "mean"),
         realized_gain_se=("realized_gain_pp", "sem"),
-        positive_realized_share=("realized_gain_pp", lambda x: (x > 0).mean()),
+        positive_realized_share=("realized_gain_pp", lambda x: (x > 1e-9).mean()),
         robust_lower_bound_pp=("robust_lower_bound_pp", "mean"),
     )
     summary["scenario"] = pd.Categorical(
