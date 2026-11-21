@@ -108,9 +108,7 @@ def _flow_problem(
 ) -> tuple[csr_array, np.ndarray, np.ndarray, slice, slice]:
     """Build incidence, supplies, capacities, and assignment and overflow arcs."""
     n_queues = len(incumbent_loads)
-    source = 0
-    item_start = 1
-    queue_start = item_start + n_cases
+    queue_start = n_cases
     overflow = queue_start + n_queues
     sink = overflow + 1
     n_nodes = sink + 1
@@ -119,8 +117,7 @@ def _flow_problem(
     queue = np.arange(n_queues)
     tails = np.concatenate(
         [
-            np.full(n_cases, source),
-            np.repeat(item_start + item, n_queues),
+            np.repeat(item, n_queues),
             queue_start + queue,
             queue_start + queue,
             [overflow],
@@ -128,7 +125,6 @@ def _flow_problem(
     )
     heads = np.concatenate(
         [
-            item_start + item,
             np.tile(queue_start + queue, n_cases),
             np.full(n_queues, sink),
             np.full(n_queues, overflow),
@@ -137,7 +133,6 @@ def _flow_problem(
     )
     capacities = np.concatenate(
         [
-            np.ones(n_cases),
             np.ones(n_cases * n_queues),
             incumbent_loads,
             n_cases - incumbent_loads,
@@ -153,13 +148,14 @@ def _flow_problem(
         shape=(n_nodes, len(tails)),
     ).tocsr()
     supply = np.zeros(n_nodes)
-    supply[source] = n_cases
+    # Each case supplies its one assignment directly.
+    supply[:n_cases] = 1
     supply[sink] = -n_cases
     # One conservation row is redundant; dropping the sink keeps the system full rank.
-    assignment = slice(n_cases, n_cases + n_cases * n_queues)
+    assignment = slice(0, n_cases * n_queues)
     overflow_arcs = slice(
-        n_cases + n_cases * n_queues + n_queues,
-        n_cases + n_cases * n_queues + 2 * n_queues,
+        n_cases * n_queues + n_queues,
+        n_cases * n_queues + 2 * n_queues,
     )
     return csr_array(incidence[:-1]), supply[:-1], capacities, assignment, overflow_arcs
 
@@ -293,7 +289,7 @@ def solve_assignment(
     if not side_rows:
         # Queue-node potentials: the solution assigns each case to a queue that
         # minimizes its arc cost plus that queue's potential.
-        queue_start = 1 + n_cases
+        queue_start = n_cases
         queue_prices = np.asarray(result.eqlin.marginals)[
             queue_start : queue_start + n_queues
         ]
